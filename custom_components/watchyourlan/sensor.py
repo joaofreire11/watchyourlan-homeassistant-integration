@@ -31,8 +31,8 @@ class WatchYourLANSensor(CoordinatorEntity, SensorEntity):
     def state(self):
         hosts = self.coordinator.data or []
         total = len(hosts)
-        online = sum(1 for h in hosts if h.get("online"))
-        known = sum(1 for h in hosts if h.get("known"))
+        online = sum(1 for h in hosts if h.get("online") is True)
+        known = sum(1 for h in hosts if h.get("known") is True)
 
         if self._type == "total":
             return total
