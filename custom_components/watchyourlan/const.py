@@ -1,0 +1,2 @@
+DOMAIN = "watchyourlan"
+DEFAULT_SCAN_INTERVAL = 60

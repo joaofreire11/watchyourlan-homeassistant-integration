@@ -1,0 +1,12 @@
+{
+    "domain": "watchyourlan",
+    "name": "WatchYourLAN",
+    "version": "1.0.0",
+    "documentation": "https://github.com/aceberg/WatchYourLAN",
+    "requirements": ["aiohttp"],
+    "dependencies": [],
+    "codeowners": ["@yourgithubusername"],
+    "config_flow": true,
+    "iot_class": "local_polling"
+  }
+  
