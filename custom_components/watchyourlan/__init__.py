@@ -85,7 +85,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     host = entry.data.get(CONF_HOST, DEFAULT_HOST)
     port = entry.data.get(CONF_PORT, DEFAULT_PORT)
     scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-
+    
+    # Convert the scan_interval to a timedelta object
+    scan_interval = timedelta(seconds=scan_interval)
+    
     coordinator = WatchYourLANDataUpdateCoordinator(
         hass, host, port, scan_interval
     )
