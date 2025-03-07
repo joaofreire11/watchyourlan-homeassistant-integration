@@ -1,12 +1,12 @@
 {
-    "domain": "watchyourlan",
-    "name": "WatchYourLAN",
-    "version": "1.0.0",
-    "documentation": "https://github.com/aceberg/WatchYourLAN",
-    "requirements": ["aiohttp"],
-    "dependencies": [],
-    "codeowners": ["@joaofreire11"],
-    "config_flow": true,
-    "iot_class": "local_polling"
-  }
-  
+  "domain": "watchyourlan",
+  "name": "WatchYourLAN",
+  "config_flow": true,
+  "documentation": "https://github.com/joaofreire11/watchyourlan",
+  "issue_tracker": "https://github.com/joaofreire11/watchyourlan/issues",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@joaofreire11"],
+  "iot_class": "local_polling",
+  "version": "0.1.0"
+}

@@ -1,0 +1,23 @@
+{
+    "config": {
+      "title": "WatchYourLAN",
+      "step": {
+        "user": {
+          "title": "Connect to WatchYourLAN",
+          "data": {
+            "host": "Host",
+            "port": "Port",
+            "scan_interval": "Scan interval (seconds)"
+          }
+        }
+      },
+      "error": {
+        "cannot_connect": "Failed to connect to WatchYourLAN",
+        "invalid_auth": "Invalid authentication",
+        "unknown": "Unexpected error"
+      },
+      "abort": {
+        "already_configured": "WatchYourLAN is already configured"
+      }
+    }
+  }
