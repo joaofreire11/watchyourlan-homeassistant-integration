@@ -1,57 +1,27 @@
-"""
-Support for WatchYourLAN sensors.
-"""
+"""Support for WatchYourLAN sensors."""
 import logging
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DOMAIN, ICON
+from .const import DOMAIN, ICON
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_platform(
-    hass: HomeAssistant, config, async_add_entities, discovery_info=None
-):
-    """Set up the WatchYourLAN sensors."""
-    coordinator = hass.data[DOMAIN]["coordinator"]
-    
-    await coordinator.async_refresh()
-    
-    if not coordinator.last_update_success:
-        return
-    
-    entities = []
-    
-    # Add network status sensors
-    entities.append(WatchYourLANTotalDevicesSensor(coordinator))
-    entities.append(WatchYourLANOnlineDevicesSensor(coordinator))
-    entities.append(WatchYourLANOfflineDevicesSensor(coordinator))
-    entities.append(WatchYourLANKnownDevicesSensor(coordinator))
-    entities.append(WatchYourLANUnknownDevicesSensor(coordinator))
-    
-    async_add_entities(entities, True)
-
-
-async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities
-):
-    """Set up WatchYourLAN sensors based on a config entry."""
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
+    """Set up WatchYourLAN sensors from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    
+
     entities = []
-    
-    # Add network status sensors
     entities.append(WatchYourLANTotalDevicesSensor(coordinator))
     entities.append(WatchYourLANOnlineDevicesSensor(coordinator))
     entities.append(WatchYourLANOfflineDevicesSensor(coordinator))
     entities.append(WatchYourLANKnownDevicesSensor(coordinator))
     entities.append(WatchYourLANUnknownDevicesSensor(coordinator))
-    
+
     async_add_entities(entities, True)
 
 
@@ -64,7 +34,7 @@ class WatchYourLANBaseSensor(CoordinatorEntity, SensorEntity):
         self._name = f"WatchYourLAN {name_suffix}"
         self._unique_id = f"watchyourlan_{entity_id_suffix}"
         self._state = None
-        self._icon = ICON
+        self._attr_icon = ICON
 
     @property
     def name(self):
@@ -73,133 +43,95 @@ class WatchYourLANBaseSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def unique_id(self):
-        """Return a unique, Home Assistant friendly identifier for this entity."""
+        """Return a unique ID for this sensor."""
         return self._unique_id
 
     @property
-    def icon(self):
-        """Return the icon to use in the frontend."""
-        return self._icon
-
-    @property
     def native_value(self):
-        """Return the state of the sensor."""
+        """Return the sensor's state."""
         return self._state
 
 
 class WatchYourLANTotalDevicesSensor(WatchYourLANBaseSensor):
-    """Sensor for total devices in WatchYourLAN."""
+    """Sensor showing the total number of devices."""
 
     def __init__(self, coordinator):
-        """Initialize the sensor."""
         super().__init__(coordinator, "Total Devices", "total_devices")
         self._update_state()
 
     @callback
     def _handle_coordinator_update(self):
-        """Handle updated data from the coordinator."""
         self._update_state()
         self.async_write_ha_state()
 
     def _update_state(self):
-        """Update the state from the coordinator data."""
-        if self.coordinator.data and "hosts" in self.coordinator.data:
-            self._state = len(self.coordinator.data["hosts"])
-        else:
-            self._state = 0
+        hosts = self.coordinator.data.get("hosts", [])
+        self._state = len(hosts)
 
 
 class WatchYourLANOnlineDevicesSensor(WatchYourLANBaseSensor):
-    """Sensor for online devices in WatchYourLAN."""
+    """Sensor showing the number of online devices."""
 
     def __init__(self, coordinator):
-        """Initialize the sensor."""
         super().__init__(coordinator, "Online Devices", "online_devices")
         self._update_state()
 
     @callback
     def _handle_coordinator_update(self):
-        """Handle updated data from the coordinator."""
         self._update_state()
         self.async_write_ha_state()
 
     def _update_state(self):
-        """Update the state from the coordinator data."""
-        if self.coordinator.data and "hosts" in self.coordinator.data:
-            self._state = sum(
-                1 for host in self.coordinator.data["hosts"] if host.get("online", False)
-            )
-        else:
-            self._state = 0
+        hosts = self.coordinator.data.get("hosts", [])
+        self._state = sum(1 for host in hosts if host.get("online"))
 
 
 class WatchYourLANOfflineDevicesSensor(WatchYourLANBaseSensor):
-    """Sensor for offline devices in WatchYourLAN."""
+    """Sensor showing the number of offline devices."""
 
     def __init__(self, coordinator):
-        """Initialize the sensor."""
         super().__init__(coordinator, "Offline Devices", "offline_devices")
         self._update_state()
 
     @callback
     def _handle_coordinator_update(self):
-        """Handle updated data from the coordinator."""
         self._update_state()
         self.async_write_ha_state()
 
     def _update_state(self):
-        """Update the state from the coordinator data."""
-        if self.coordinator.data and "hosts" in self.coordinator.data:
-            self._state = sum(
-                1 for host in self.coordinator.data["hosts"] if not host.get("online", False)
-            )
-        else:
-            self._state = 0
+        hosts = self.coordinator.data.get("hosts", [])
+        self._state = sum(1 for host in hosts if not host.get("online"))
 
 
 class WatchYourLANKnownDevicesSensor(WatchYourLANBaseSensor):
-    """Sensor for known devices in WatchYourLAN."""
+    """Sensor showing the number of known devices."""
 
     def __init__(self, coordinator):
-        """Initialize the sensor."""
         super().__init__(coordinator, "Known Devices", "known_devices")
         self._update_state()
 
     @callback
     def _handle_coordinator_update(self):
-        """Handle updated data from the coordinator."""
         self._update_state()
         self.async_write_ha_state()
 
     def _update_state(self):
-        """Update the state from the coordinator data."""
-        if self.coordinator.data and "hosts" in self.coordinator.data:
-            self._state = sum(
-                1 for host in self.coordinator.data["hosts"] if host.get("known", False)
-            )
-        else:
-            self._state = 0
+        hosts = self.coordinator.data.get("hosts", [])
+        self._state = sum(1 for host in hosts if host.get("known"))
 
 
 class WatchYourLANUnknownDevicesSensor(WatchYourLANBaseSensor):
-    """Sensor for unknown devices in WatchYourLAN."""
+    """Sensor showing the number of unknown devices."""
 
     def __init__(self, coordinator):
-        """Initialize the sensor."""
         super().__init__(coordinator, "Unknown Devices", "unknown_devices")
         self._update_state()
 
     @callback
     def _handle_coordinator_update(self):
-        """Handle updated data from the coordinator."""
         self._update_state()
         self.async_write_ha_state()
 
     def _update_state(self):
-        """Update the state from the coordinator data."""
-        if self.coordinator.data and "hosts" in self.coordinator.data:
-            self._state = sum(
-                1 for host in self.coordinator.data["hosts"] if not host.get("known", False)
-            )
-        else:
-            self._state = 0
+        hosts = self.coordinator.data.get("hosts", [])
+        self._state = sum(1 for host in hosts if not host.get("known"))
