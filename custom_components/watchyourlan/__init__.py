@@ -103,23 +103,47 @@ class WatchYourLANCoordinator(DataUpdateCoordinator):
         self._session = session
         self._api_url = f"http://{host}:{port}/api/all"
 
-    async def _async_update_data(self) -> dict:
-        """Fetch the latest data from the WatchYourLAN API."""
-        try:
-            async with self._session.get(self._api_url) as resp:
-                if resp.status != 200:
-                    raise UpdateFailed(
-                        f"Unexpected status from WatchYourLAN API: {resp.status}"
+async def _async_update_data(self) -> dict:
+    """Fetch the latest data from the WatchYourLAN API."""
+    try:
+        async with self._session.get(self._api_url) as resp:
+            if resp.status != 200:
+                raise UpdateFailed(
+                    f"Unexpected status from WatchYourLAN API: {resp.status}"
+                )
+            data = await resp.json()
+
+            # If the API returns a list, wrap it with {"hosts": list_of_hosts}
+            if isinstance(data, list):
+                # OPTIONAL: transform keys so they match your existing code.
+                # For example, "Mac" -> "mac", "Now" -> "online", etc.
+                wrapped_hosts = []
+                for item in data:
+                    wrapped_hosts.append(
+                        {
+                            "id": item.get("ID"),
+                            "mac": item.get("Mac"),
+                            "name": item.get("Name") or "",
+                            # rename "Now" to "online" if you want "online" in HA
+                            "online": bool(item.get("Now")),
+                            # rename "Known" to "known" if you want "known" in HA
+                            "known": bool(item.get("Known")),
+                            # use "IP" as "ip", "Hw" as "vendor", etc.
+                            "ip": item.get("IP"),
+                            "vendor": item.get("Hw"),
+                            "iface": item.get("Iface"),
+                            "dns": item.get("DNS"),
+                            "date": item.get("Date"),
+                        }
                     )
-                data = await resp.json()
-                if not isinstance(data, dict):
-                    # If the API returns something unexpected, handle gracefully
-                    raise UpdateFailed(
-                        f"Invalid JSON response from WatchYourLAN: {data}"
-                    )
+                return {"hosts": wrapped_hosts}
+
+            # If it's already a dict, just return it
+            if isinstance(data, dict):
                 return data
-        except asyncio.CancelledError:
-            # Let Home Assistant handle canceled tasks properly
-            raise
-        except Exception as err:
-            raise UpdateFailed(f"Error communicating with WatchYourLAN: {err}") from err
+
+            # Otherwise, something truly unexpected came back
+            raise UpdateFailed(f"Invalid JSON structure from WatchYourLAN: {data}")
+
+    except Exception as err:
+        raise UpdateFailed(f"Error communicating with WatchYourLAN: {err}") from err
