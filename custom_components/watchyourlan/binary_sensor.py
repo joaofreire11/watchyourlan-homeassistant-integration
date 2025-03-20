@@ -14,6 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up WatchYourLAN binary sensors from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    chosen_macs = entry.options.get("devices_to_track", [])
 
     _LOGGER.debug("WatchYourLAN coordinator data: %s", coordinator.data)
 
@@ -23,21 +24,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         hosts = data["hosts"]
         if isinstance(hosts, list) and hosts:
             for host in hosts:
-                _LOGGER.debug("Adding binary sensor for host: %s", host)
-                entities.append(WatchYourLANDevicePresenceSensor(coordinator, host))
+                mac = host.get("mac")
+                if mac and mac in chosen_macs:
+                    entities.append(WatchYourLANDevicePresenceSensor(coordinator, host))
         else:
             _LOGGER.warning("No hosts found in WatchYourLAN data or data is not a list")
-            # As you originally do, add a placeholder
-            placeholder_host = {
-                "id": "none",
-                "mac": "none",
-                "name": "None",
-                "ip": "none",
-                "known": False,
-                "vendor": "Unknown",
-                "online": False,
-            }
-            entities.append(WatchYourLANDevicePresenceSensor(coordinator, placeholder_host))
     else:
         _LOGGER.warning("No hosts data in WatchYourLAN coordinator")
 
@@ -56,9 +47,6 @@ class WatchYourLANDevicePresenceSensor(CoordinatorEntity, BinarySensorEntity):
         self._known = host_data.get("known", False)
         self._vendor = host_data.get("vendor", "")
         self._name = host_data.get("name") or self._mac or "Unknown Device"
-        if not self._name or self._name == "null":
-            self._name = self._mac or "Unknown Device"
-
         self._is_on = host_data.get("online", False)
 
     @property
@@ -80,7 +68,6 @@ class WatchYourLANDevicePresenceSensor(CoordinatorEntity, BinarySensorEntity):
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
         found = False
-
         data = self.coordinator.data
         if data and "hosts" in data and isinstance(data["hosts"], list):
             for host in data["hosts"]:
@@ -90,13 +77,11 @@ class WatchYourLANDevicePresenceSensor(CoordinatorEntity, BinarySensorEntity):
                     self._is_on = host.get("online", False)
                     self._ip = host.get("ip", self._ip)
                     self._known = host.get("known", self._known)
-                    # Possibly update name if changed
                     new_name = host.get("name")
                     if new_name and new_name not in ("null", self._name, self._mac):
                         self._name = new_name
                     found = True
                     break
-
             if not found and self._mac != "none":
                 # Host is missing from the updated list, mark offline
                 self._is_on = False

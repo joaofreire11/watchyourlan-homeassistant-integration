@@ -15,12 +15,15 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up WatchYourLAN device trackers from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    chosen_macs = entry.options.get("devices_to_track", [])
 
     entities = []
     data = coordinator.data
     if data and "hosts" in data:
         for host in data["hosts"]:
-            entities.append(WatchYourLANDeviceTracker(coordinator, host))
+            mac = host.get("mac")
+            if mac and mac in chosen_macs:
+                entities.append(WatchYourLANDeviceTracker(coordinator, host))
 
     async_add_entities(entities, True)
 
@@ -90,7 +93,7 @@ class WatchYourLANDeviceTracker(CoordinatorEntity, ScannerEntity):
                     self._ip = host.get("ip")
                     self._known = host.get("known", False)
                     new_name = host.get("name")
-                    if new_name and new_name != self._mac and new_name != self._name:
+                    if new_name and new_name not in (self._mac, self._name):
                         self._name = new_name
                     break
 
