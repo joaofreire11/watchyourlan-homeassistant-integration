@@ -16,16 +16,12 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up WatchYourLAN from a config entry."""
-    # Pull config values
     host = entry.data["host"]
     port = entry.data["port"]
     scan_interval = entry.data["scan_interval"]
 
-    # Create an aiohttp session
-    # (We’ll store this so we can close it on unload.)
     session = aiohttp.ClientSession()
 
     coordinator = WatchYourLANCoordinator(
@@ -37,7 +33,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     try:
-        # Attempt initial refresh to verify we can connect
         await coordinator.async_config_entry_first_refresh()
 
     except (ConfigEntryNotReady, UpdateFailed) as err:
@@ -49,19 +44,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await session.close()
         raise
 
-    # Store references so platforms can look up the coordinator
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
         "session": session,
     }
 
-    # Forward the setup to your platforms (sensor, binary_sensor, device_tracker)
     await hass.config_entries.async_forward_entry_setups(
         entry, ["sensor", "binary_sensor", "device_tracker"]
     )
 
     return True
-
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a WatchYourLAN config entry."""
@@ -69,14 +61,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry, ["sensor", "binary_sensor", "device_tracker"]
     )
     if unload_ok:
-        # Close our stored aiohttp session
         session = hass.data[DOMAIN][entry.entry_id]["session"]
         await session.close()
-
         hass.data[DOMAIN].pop(entry.entry_id)
-
     return unload_ok
-
 
 class WatchYourLANCoordinator(DataUpdateCoordinator):
     """DataUpdateCoordinator to fetch data from WatchYourLAN's API."""
@@ -109,8 +97,8 @@ class WatchYourLANCoordinator(DataUpdateCoordinator):
                     )
                 data = await resp.json()
 
-                # If the API returns a list, wrap it under "hosts"
                 if isinstance(data, list):
+                    # Wrap the list in {"hosts": []} 
                     wrapped_hosts = []
                     for item in data:
                         wrapped_hosts.append(
@@ -128,13 +116,10 @@ class WatchYourLANCoordinator(DataUpdateCoordinator):
                             }
                         )
                     return {"hosts": wrapped_hosts}
-
-                # If it's already a dict, just return it
-                if isinstance(data, dict):
+                elif isinstance(data, dict):
                     return data
-
-                # Otherwise, something truly unexpected
-                raise UpdateFailed(f"Invalid JSON structure from WatchYourLAN: {data}")
+                else:
+                    raise UpdateFailed(f"Invalid JSON structure: {data}")
 
         except Exception as err:
             raise UpdateFailed(f"Error communicating with WatchYourLAN: {err}") from err

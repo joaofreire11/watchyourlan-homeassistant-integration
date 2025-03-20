@@ -4,8 +4,8 @@ import logging
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN, ICON
 
@@ -16,64 +16,75 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     """Set up WatchYourLAN sensors from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     options = entry.options
+    entry_id = entry.entry_id  # We'll pass this to each sensor
 
-    # Possibly some sensors are always added (like network-level stats):
     entities = []
-    entities.append(WatchYourLANTotalDevicesSensor(coordinator))
-    entities.append(WatchYourLANOnlineDevicesSensor(coordinator))
-    entities.append(WatchYourLANOfflineDevicesSensor(coordinator))
-    # Mark these two as "diagnostic" just as an example
-    diag_known = WatchYourLANKnownDevicesSensor(coordinator)
+
+    # Some integration-wide sensors
+    entities.append(WatchYourLANTotalDevicesSensor(coordinator, entry_id))
+    entities.append(WatchYourLANOnlineDevicesSensor(coordinator, entry_id))
+    entities.append(WatchYourLANOfflineDevicesSensor(coordinator, entry_id))
+
+    # Mark these two as DIAGNOSTIC, just as an example
+    diag_known = WatchYourLANKnownDevicesSensor(coordinator, entry_id)
     diag_known._attr_entity_category = EntityCategory.DIAGNOSTIC
-    diag_unknown = WatchYourLANUnknownDevicesSensor(coordinator)
+    diag_unknown = WatchYourLANUnknownDevicesSensor(coordinator, entry_id)
     diag_unknown._attr_entity_category = EntityCategory.DIAGNOSTIC
+
     entities.append(diag_known)
     entities.append(diag_unknown)
 
-    # If you create a sensor per host, limit it to only "devices_to_track"
+    # Only create per-host sensors for devices user selected in Options
     devices_to_track = options.get("devices_to_track", [])
     for host in coordinator.data.get("hosts", []):
         mac = host.get("mac")
         if mac and mac in devices_to_track:
-            # Example: a custom sensor per device
-            entities.append(WatchYourLANHostSignalSensor(coordinator, host))
-            # etc. (Any other per-host sensors you want)
+            # Example of a per-host sensor
+            entities.append(WatchYourLANHostSignalSensor(coordinator, entry_id, host))
 
     async_add_entities(entities, True)
 
 
 class WatchYourLANBaseSensor(CoordinatorEntity, SensorEntity):
-    """Base class for WatchYourLAN sensors."""
+    """Base class for WatchYourLAN sensors that belong to one device: the 'server'."""
 
-    def __init__(self, coordinator, name_suffix, entity_id_suffix):
+    def __init__(self, coordinator, entry_id, name_suffix, entity_id_suffix):
         """Initialize the sensor."""
         super().__init__(coordinator)
+        self._entry_id = entry_id
         self._name = f"WatchYourLAN {name_suffix}"
-        self._unique_id = f"watchyourlan_{entity_id_suffix}"
+        self._unique_id = f"watchyourlan_{entry_id}_{entity_id_suffix}"
         self._state = None
         self._attr_icon = ICON
 
     @property
     def name(self):
-        """Return the sensor name."""
         return self._name
 
     @property
     def unique_id(self):
-        """Return a unique ID for this entity."""
         return self._unique_id
 
     @property
     def native_value(self):
-        """Return the sensor's state."""
         return self._state
+
+    @property
+    def device_info(self):
+        """Group all these sensors under one device: the 'WatchYourLAN Server'."""
+        return {
+            "identifiers": {(DOMAIN, self._entry_id)},
+            "name": "WatchYourLAN Server",
+            "manufacturer": "WatchYourLAN",
+            "model": "Network Gateway",
+        }
 
 
 class WatchYourLANTotalDevicesSensor(WatchYourLANBaseSensor):
     """Sensor for total number of devices."""
 
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Total Devices", "total_devices")
+    def __init__(self, coordinator, entry_id):
+        super().__init__(coordinator, entry_id, "Total Devices", "total_devices")
         self._update_state()
 
     @callback
@@ -89,8 +100,8 @@ class WatchYourLANTotalDevicesSensor(WatchYourLANBaseSensor):
 class WatchYourLANOnlineDevicesSensor(WatchYourLANBaseSensor):
     """Sensor for number of online devices."""
 
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Online Devices", "online_devices")
+    def __init__(self, coordinator, entry_id):
+        super().__init__(coordinator, entry_id, "Online Devices", "online_devices")
         self._update_state()
 
     @callback
@@ -106,8 +117,8 @@ class WatchYourLANOnlineDevicesSensor(WatchYourLANBaseSensor):
 class WatchYourLANOfflineDevicesSensor(WatchYourLANBaseSensor):
     """Sensor for number of offline devices."""
 
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Offline Devices", "offline_devices")
+    def __init__(self, coordinator, entry_id):
+        super().__init__(coordinator, entry_id, "Offline Devices", "offline_devices")
         self._update_state()
 
     @callback
@@ -123,8 +134,8 @@ class WatchYourLANOfflineDevicesSensor(WatchYourLANBaseSensor):
 class WatchYourLANKnownDevicesSensor(WatchYourLANBaseSensor):
     """Sensor for number of known devices."""
 
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Known Devices", "known_devices")
+    def __init__(self, coordinator, entry_id):
+        super().__init__(coordinator, entry_id, "Known Devices", "known_devices")
         self._update_state()
 
     @callback
@@ -140,8 +151,8 @@ class WatchYourLANKnownDevicesSensor(WatchYourLANBaseSensor):
 class WatchYourLANUnknownDevicesSensor(WatchYourLANBaseSensor):
     """Sensor for number of unknown devices."""
 
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Unknown Devices", "unknown_devices")
+    def __init__(self, coordinator, entry_id):
+        super().__init__(coordinator, entry_id, "Unknown Devices", "unknown_devices")
         self._update_state()
 
     @callback
@@ -154,28 +165,22 @@ class WatchYourLANUnknownDevicesSensor(WatchYourLANBaseSensor):
         self._state = sum(1 for h in hosts if not h.get("known"))
 
 
-#
-# Example custom sensor for each host (if desired):
-#
 class WatchYourLANHostSignalSensor(CoordinatorEntity, SensorEntity):
-    """Example per-host sensor, only added if user chooses the host in Options."""
+    """Example: A sensor for each tracked host, also under the single 'server' device."""
 
-    def __init__(self, coordinator, host_data):
+    def __init__(self, coordinator, entry_id, host_data):
         super().__init__(coordinator)
+        self._entry_id = entry_id
         self._mac = host_data.get("mac")
         self._name = host_data.get("name") or self._mac
-        self._attr_icon = "mdi:wifi"  # or whatever
-        self._attr_unique_id = f"watchyourlan_signal_{self._mac}"
-        self._state = None  # set by update
-        # If you want this sensor under Diagnostics:
-        # self._attr_entity_category = EntityCategory.DIAGNOSTIC
-
-        # Example attribute for the IP
+        self._attr_icon = "mdi:wifi"
+        # Unique ID includes the host's mac, to avoid collisions
+        self._attr_unique_id = f"watchyourlan_signal_{self._entry_id}_{self._mac}"
+        self._state = None
         self._ip = host_data.get("ip")
 
     @property
     def name(self):
-        """Return the entity name."""
         return f"Signal for {self._name}"
 
     @property
@@ -189,15 +194,23 @@ class WatchYourLANHostSignalSensor(CoordinatorEntity, SensorEntity):
             "ip": self._ip,
         }
 
+    @property
+    def device_info(self):
+        """Also belongs to the single 'server' device."""
+        return {
+            "identifiers": {(DOMAIN, self._entry_id)},
+            "name": "WatchYourLAN Server",
+            "manufacturer": "WatchYourLAN",
+            "model": "Network Gateway",
+        }
+
     @callback
     def _handle_coordinator_update(self):
-        """Handle updated data from the coordinator."""
-        # Re-find our host in coordinator data
+        """Update from coordinator data."""
         for host in self.coordinator.data.get("hosts", []):
             if host.get("mac") == self._mac:
-                # Suppose we have some custom signal data in host
-                self._state = host.get("signal", 100)  # or None if not provided
+                # Suppose signal is in host["signal"]; if not, pick something else
+                self._state = host.get("signal", 100)
                 self._ip = host.get("ip", self._ip)
                 break
-
         self.async_write_ha_state()
