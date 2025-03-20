@@ -1,4 +1,4 @@
-"""Binary sensors for WatchYourLAN."""
+"""Binary sensors for WatchYourLAN, creating separate child devices for each tracked host."""
 import logging
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
@@ -14,9 +14,10 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up WatchYourLAN binary sensors from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    chosen_macs = entry.options.get("devices_to_track", [])
+    entry_id = entry.entry_id
 
-    _LOGGER.debug("WatchYourLAN coordinator data: %s", coordinator.data)
+    # The user-chosen MACs from your Options Flow
+    chosen_macs = entry.options.get("devices_to_track", [])
 
     entities = []
     data = coordinator.data
@@ -26,7 +27,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             for host in hosts:
                 mac = host.get("mac")
                 if mac and mac in chosen_macs:
-                    entities.append(WatchYourLANDevicePresenceSensor(coordinator, host))
+                    # Create a separate child device for this host
+                    entities.append(WatchYourLANHostPresenceSensor(coordinator, entry_id, host))
         else:
             _LOGGER.warning("No hosts found in WatchYourLAN data or data is not a list")
     else:
@@ -35,12 +37,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async_add_entities(entities, True)
 
 
-class WatchYourLANDevicePresenceSensor(CoordinatorEntity, BinarySensorEntity):
-    """Binary sensor representing whether a device is online (presence)."""
+class WatchYourLANHostPresenceSensor(CoordinatorEntity, BinarySensorEntity):
+    """
+    A binary sensor for each tracked host, represented as a separate device in HA.
+    """
 
-    def __init__(self, coordinator, host_data):
+    def __init__(self, coordinator, entry_id, host_data):
         """Initialize the binary sensor."""
         super().__init__(coordinator)
+        self._entry_id = entry_id
         self._host_id = host_data.get("id", "unknown")
         self._mac = host_data.get("mac", "unknown")
         self._ip = host_data.get("ip", "")
@@ -51,18 +56,45 @@ class WatchYourLANDevicePresenceSensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def name(self):
-        """Return the entity’s name."""
+        """Return the entity's name."""
         return f"{self._name} Presence"
 
     @property
     def is_on(self):
-        """Return True if device is online."""
+        """Return True if device is online (presence)."""
         return self._is_on
 
     @property
     def unique_id(self):
-        """Return a unique ID."""
+        """Return a unique ID for this sensor."""
         return f"watchyourlan_binary_sensor_{self._mac}"
+
+    @property
+    def device_info(self):
+        """
+        Make this sensor appear as a *separate device* (the tracked host),
+        with 'via_device' pointing to our 'hub' device (the server).
+        """
+        return {
+            # Unique identifier for this device, based on MAC
+            "identifiers": {(DOMAIN, self._mac)},
+            "name": self._name,
+            "manufacturer": self._vendor or "WatchYourLAN",
+            "model": "Tracked Host",
+            # 'via_device': tie this child device to the main hub device
+            "via_device": (DOMAIN, self._entry_id),
+        }
+
+    @property
+    def extra_state_attributes(self):
+        """Return extra attributes about the host."""
+        return {
+            "mac": self._mac,
+            "ip": self._ip,
+            "known": self._known,
+            "vendor": self._vendor,
+            "host_id": self._host_id,
+        }
 
     @callback
     def _handle_coordinator_update(self):
@@ -71,9 +103,7 @@ class WatchYourLANDevicePresenceSensor(CoordinatorEntity, BinarySensorEntity):
         data = self.coordinator.data
         if data and "hosts" in data and isinstance(data["hosts"], list):
             for host in data["hosts"]:
-                mac = host.get("mac")
-                if mac and mac == self._mac:
-                    # Update presence info
+                if host.get("mac") == self._mac:
                     self._is_on = host.get("online", False)
                     self._ip = host.get("ip", self._ip)
                     self._known = host.get("known", self._known)
@@ -82,8 +112,9 @@ class WatchYourLANDevicePresenceSensor(CoordinatorEntity, BinarySensorEntity):
                         self._name = new_name
                     found = True
                     break
+
             if not found and self._mac != "none":
-                # Host is missing from the updated list, mark offline
+                # If the host is missing from updated data, mark offline
                 self._is_on = False
 
         self.async_write_ha_state()

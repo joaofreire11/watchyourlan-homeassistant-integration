@@ -1,4 +1,4 @@
-"""Device tracker for WatchYourLAN."""
+"""device_tracker.py - One child device per tracked host in WatchYourLAN."""
 import logging
 
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
@@ -13,8 +13,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Set up WatchYourLAN device trackers from a config entry."""
+    """Set up WatchYourLAN device trackers (child devices) from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    entry_id = entry.entry_id
+
+    # The user-chosen MACs (the devices they want to see in HA)
     chosen_macs = entry.options.get("devices_to_track", [])
 
     entities = []
@@ -23,16 +26,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         for host in data["hosts"]:
             mac = host.get("mac")
             if mac and mac in chosen_macs:
-                entities.append(WatchYourLANDeviceTracker(coordinator, host))
+                # Create a child device for this host
+                entities.append(WatchYourLANHostDeviceTracker(coordinator, entry_id, host))
 
     async_add_entities(entities, True)
 
 
-class WatchYourLANDeviceTracker(CoordinatorEntity, ScannerEntity):
-    """WatchYourLAN device tracker entity."""
+class WatchYourLANHostDeviceTracker(CoordinatorEntity, ScannerEntity):
+    """Device tracker for each selected host, represented as a separate device."""
 
-    def __init__(self, coordinator, host_data):
+    def __init__(self, coordinator, entry_id, host_data):
         super().__init__(coordinator)
+        self._entry_id = entry_id
         self._host_id = host_data.get("id")
         self._mac = host_data.get("mac")
         self._ip = host_data.get("ip")
@@ -47,54 +52,64 @@ class WatchYourLANDeviceTracker(CoordinatorEntity, ScannerEntity):
 
     @property
     def unique_id(self):
+        """Unique ID for the device tracker entity."""
         return f"watchyourlan_tracker_{self._mac}"
 
     @property
     def source_type(self):
+        """This is typically SourceType.ROUTER for a router-based tracker."""
         return SourceType.ROUTER
 
     @property
     def is_connected(self):
+        """Return true if the device is connected."""
         return self._is_connected
 
     @property
     def ip_address(self):
+        """The IP address of the host."""
         return self._ip
 
     @property
     def mac_address(self):
+        """The MAC address of the host."""
         return self._mac
 
     @property
     def device_info(self):
+        """
+        Make each tracked host a child device of the main 'hub'.
+        Use (DOMAIN, self._mac) as the unique identifier for the child device.
+        'via_device': tie it back to the aggregator/hub device (DOMAIN, entry_id).
+        """
         return {
             "identifiers": {(DOMAIN, self._mac)},
             "name": self._name,
             "manufacturer": self._vendor or "Unknown",
-            "model": "Network Device",
+            "model": "Tracked Host",
+            "via_device": (DOMAIN, self._entry_id),
         }
 
     @property
     def extra_state_attributes(self):
+        """Provide any additional attributes."""
         return {
+            "host_id": self._host_id,
             "known": self._known,
             "vendor": self._vendor,
-            "id": self._host_id,
         }
 
     @callback
     def _handle_coordinator_update(self):
-        """Handle updated data from the coordinator."""
-        data = self.coordinator.data
-        if data and "hosts" in data:
-            for host in data["hosts"]:
-                if host.get("mac") == self._mac:
-                    self._is_connected = host.get("online", False)
-                    self._ip = host.get("ip")
-                    self._known = host.get("known", False)
-                    new_name = host.get("name")
-                    if new_name and new_name not in (self._mac, self._name):
-                        self._name = new_name
-                    break
+        """Update from coordinator data."""
+        for host in self.coordinator.data.get("hosts", []):
+            if host.get("mac") == self._mac:
+                self._is_connected = host.get("online", False)
+                self._ip = host.get("ip")
+                self._known = host.get("known", False)
+                new_name = host.get("name")
+                if new_name and new_name != self._mac and new_name != self._name:
+                    self._name = new_name
+                break
 
         self.async_write_ha_state()
